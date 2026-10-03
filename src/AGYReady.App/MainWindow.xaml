@@ -1,0 +1,162 @@
+<Window x:Class="AGYReady.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AGY CLI-CLASP 安裝小幫手（標標版）" Icon="/Assets/AGYReady.ico" Height="650" Width="980" MinHeight="520" MinWidth="760"
+        FontFamily="Segoe UI" FontSize="13" WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource {x:Static SystemColors.ControlBrushKey}}">
+    <DockPanel Margin="12">
+        <StatusBar DockPanel.Dock="Bottom" Margin="0,9,0,0">
+            <StatusBarItem>
+                <TextBlock Name="ActivityTitle" Text="就緒" MinWidth="180" />
+            </StatusBarItem>
+            <Separator />
+            <StatusBarItem>
+                <ProgressBar Name="ActivityProgress" Width="180" Height="15"
+                             Visibility="Collapsed" IsIndeterminate="True" />
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Name="PercentText" MinWidth="115" />
+            </StatusBarItem>
+            <StatusBarItem>
+                <TextBlock Name="ElapsedText" MinWidth="65" />
+            </StatusBarItem>
+        </StatusBar>
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <DockPanel Grid.Row="0" Margin="2,2,2,12">
+                <Button Name="CheckButton" DockPanel.Dock="Right" Content="重新檢查"
+                        Width="96" Height="30" Margin="12,2,0,0" Click="RunChecks_Click" />
+                <StackPanel>
+                    <TextBlock Text="AGY CLI-CLASP 安裝小幫手（標標版）" FontSize="21" FontWeight="SemiBold" />
+                    <TextBlock Name="OverviewText" Text="正在準備檢查…" Margin="0,2,0,0"
+                               Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                </StackPanel>
+            </DockPanel>
+
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="274" MinWidth="230" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" MinWidth="350" />
+                </Grid.ColumnDefinitions>
+                <ScrollViewer Grid.Column="0" Margin="0,0,9,0"
+                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <StackPanel>
+                    <GroupBox Header="AGY CLI" Padding="10" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Name="AgyStatusText" Text="尚未檢查" TextWrapping="Wrap"
+                                       Margin="0,0,0,10" />
+                            <Button Name="InstallButton" Content="安裝 AGY" Height="30"
+                                    Margin="0,0,0,6" Click="Install_Click" IsEnabled="False" />
+                            <Button Name="RepairButton" Content="修復 User PATH" Height="30"
+                                    Margin="0,0,0,6" Click="RepairPath_Click" IsEnabled="False" />
+                            <Button Name="RestoreButton" Content="還原本次 PATH" Height="30"
+                                    Click="RestorePath_Click" IsEnabled="False" />
+                        </StackPanel>
+                    </GroupBox>
+                    <GroupBox Header="Node.js / npm / clasp" Padding="10" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Name="ToolStatusText" Text="尚未檢查" TextWrapping="Wrap"
+                                       Margin="0,0,0,10" />
+                            <Button Name="NodeButton" Content="下載／安裝 Node.js + npm" Height="30"
+                                    Margin="0,0,0,6" Click="InstallNode_Click"
+                                    IsEnabled="False" Visibility="Collapsed" />
+                            <Button Name="ClaspButton" Content="安裝 clasp" Height="30"
+                                    Click="InstallClasp_Click" IsEnabled="False" />
+                        </StackPanel>
+                    </GroupBox>
+                    <GroupBox Header="Windows Terminal 右鍵選單" Padding="10" Margin="0,0,0,10">
+                        <StackPanel>
+                            <TextBlock Name="TerminalStatusText" Text="尚未檢查" TextWrapping="Wrap"
+                                       Margin="0,0,0,10" />
+                            <Button Name="TerminalInstallButton" Content="安裝 Windows Terminal" Height="30"
+                                    Margin="0,0,0,6" Click="InstallTerminal_Click"
+                                    IsEnabled="False" Visibility="Collapsed" />
+                            <Button Name="TerminalRepairButton" Content="修復終端右鍵選單" Height="30"
+                                    Click="RepairTerminalMenu_Click" IsEnabled="False"
+                                    Visibility="Collapsed" />
+                            <Button Name="TerminalMenuAddButton" Content="Windows 10：加入免 Shift 選單" Height="30"
+                                    Margin="0,6,0,6" Click="AddTerminalMenu_Click"
+                                    ToolTip="若按鈕停用，請至設定 > 應用程式 > 應用程式執行別名啟用 wt.exe，再按重新檢查。"
+                                    IsEnabled="False" Visibility="Collapsed" />
+                            <Button Name="TerminalMenuRestoreButton" Content="移除 AGY Ready 加入的選單" Height="30"
+                                    Margin="0,6,0,0" Click="RestoreTerminalMenu_Click"
+                                    IsEnabled="False" Visibility="Collapsed" />
+                        </StackPanel>
+                    </GroupBox>
+                    <GroupBox Header="目前作業" Padding="10">
+                        <TextBlock Name="ActivityDetail" Text="等待操作" TextWrapping="Wrap"
+                                   MinHeight="40" />
+                    </GroupBox>
+                  </StackPanel>
+                </ScrollViewer>
+
+                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch" Background="Transparent"
+                              ResizeDirection="Columns" />
+
+                <TabControl Grid.Column="2" Margin="9,0,0,0">
+                    <TabItem Header="檢查項目">
+                        <DataGrid Name="CheckList" BorderThickness="0" AutoGenerateColumns="False"
+                                  IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column"
+                                  GridLinesVisibility="Horizontal" RowHeaderWidth="0">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Setter Property="ToolTip" Value="{Binding Detail}" />
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="狀態" Width="65" Binding="{Binding Status}" />
+                                <DataGridTextColumn Header="代碼" Width="90" Binding="{Binding Id}" />
+                                <DataGridTextColumn Header="檢查結果" Width="*" Binding="{Binding Summary}">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="詳細資訊">
+                        <TextBox Name="Output" IsReadOnly="True" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas" FontSize="12" BorderThickness="0"
+                                 Padding="8" />
+                    </TabItem>
+                    <TabItem Header="作者">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="26,24" MaxWidth="520" HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,24">
+                                    <Image Source="/Assets/AGYReady.ico" Width="72" Height="72" Margin="0,0,16,0" />
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock Text="AGY CLI-CLASP 安裝小幫手" FontSize="20" FontWeight="SemiBold" />
+                                        <TextBlock Text="標標版" FontSize="14" Margin="0,4,0,0"
+                                                   Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                    </StackPanel>
+                                </StackPanel>
+                                <TextBlock Text="作者" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,8" />
+                                <TextBlock Text="苗栗縣永貞國民小學彭智標老師" FontSize="17" TextWrapping="Wrap"
+                                           Margin="0,0,0,22" />
+                                <TextBlock Text="Facebook" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock TextWrapping="Wrap" Margin="0,0,0,22">
+                                    <Hyperlink NavigateUri="https://www.facebook.com/albert.peng.56?locale=zh_TW"
+                                               RequestNavigate="AuthorLink_RequestNavigate">https://www.facebook.com/albert.peng.56?locale=zh_TW</Hyperlink>
+                                </TextBlock>
+                                <TextBlock Text="聯絡信箱" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                <TextBlock TextWrapping="Wrap">
+                                    <Hyperlink NavigateUri="mailto:mihozip@gmail.com"
+                                               RequestNavigate="AuthorLink_RequestNavigate">mihozip@gmail.com</Hyperlink>
+                                </TextBlock>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>
