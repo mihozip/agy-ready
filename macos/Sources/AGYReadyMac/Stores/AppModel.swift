@@ -9,8 +9,11 @@ final class AppModel {
     private(set) var activity = "就緒" { didSet { onChange?() } }
     private(set) var message = "開啟後會檢查本機環境。" { didSet { onChange?() } }
     private(set) var progress: Double? { didSet { onChange?() } }
+    private(set) var lastError: String? { didSet { onChange?() } }
 
     var canRestorePath: Bool { PathRepairService().canRestore }
+
+    func setSetupMessage(_ text: String) { message = text }
 
     func refresh() async {
         guard !isBusy else { return }
@@ -24,8 +27,8 @@ final class AppModel {
         isBusy = false
     }
 
-    func installAGY() async {
-        guard !isBusy else { return }
+    func installAGY() async -> Bool {
+        guard !isBusy else { return false }
         isBusy = true
         activity = "正在下載 AGY 官方啟動腳本"
         progress = nil
@@ -40,13 +43,16 @@ final class AppModel {
             snapshot = await Task.detached { DiagnosticService().run() }.value
             message = snapshot?.agyWorking == true
                 ? "AGY 已安裝並通過版本驗證。" : "安裝程序已結束，但 AGY 尚未通過驗證；請查看檢查項目。"
+            lastError = snapshot?.agyWorking == true ? nil : message
         } catch {
             message = error.localizedDescription
+            lastError = message
             snapshot = await Task.detached { DiagnosticService().run() }.value
         }
         progress = nil
         activity = "就緒"
         isBusy = false
+        return snapshot?.agyWorking == true && lastError == nil
     }
 
     func installClasp() async {
@@ -61,8 +67,10 @@ final class AppModel {
             self.snapshot = await Task.detached { DiagnosticService().run() }.value
             message = self.snapshot?.claspWorking == true
                 ? "clasp 已安裝並通過版本驗證。" : "npm 已結束，但 clasp 尚未通過驗證。"
+            lastError = self.snapshot?.claspWorking == true ? nil : message
         } catch {
             message = error.localizedDescription
+            lastError = message
             self.snapshot = await Task.detached { DiagnosticService().run() }.value
         }
         activity = "就緒"
@@ -76,6 +84,7 @@ final class AppModel {
         progress = nil
         let outcome = await Task.detached { PathRepairService().repair(agyPath: candidate) }.value
         message = outcome.message
+        lastError = outcome.succeeded ? nil : message
         snapshot = await Task.detached { DiagnosticService().run() }.value
         activity = "就緒"
         isBusy = false
@@ -88,6 +97,7 @@ final class AppModel {
         progress = nil
         let outcome = await Task.detached { PathRepairService().restore() }.value
         message = outcome.message
+        lastError = outcome.succeeded ? nil : message
         snapshot = await Task.detached { DiagnosticService().run() }.value
         activity = "就緒"
         isBusy = false

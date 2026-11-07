@@ -6,6 +6,7 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/AGYReady.ico</ApplicationIcon>
+    <Version>0.2.0</Version>
     <AssemblyTitle>AGY CLI-CLASP 安裝小幫手（標標版）</AssemblyTitle>
     <Product>AGY CLI-CLASP 安裝小幫手（標標版）</Product>
   </PropertyGroup>

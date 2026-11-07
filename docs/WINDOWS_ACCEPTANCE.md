@@ -3,7 +3,7 @@
 Use a Windows 11 x64 VM or a test account. Keep a snapshot before testing installation or PATH changes.
 
 1. Run `AGYReady.App.exe`. Confirm the system and AGY checks complete.
-2. On a machine without AGY, confirm `NotInstalled`, then select **安裝 AGY** and approve the official installer. Success requires `InstalledWorking` and a version number. In a newly opened PowerShell window, run `agy --version`.
+2. On a machine without AGY, confirm `NotInstalled`, then select **安裝 AGY** and approve the official installer. Success requires `InstalledWorking` and a version number. Confirm a separate console opens AGY in the dedicated Onboarding folder. Complete account authentication, authorization code, color scheme, and rendering mode there. Close AGY, then run it in a project and confirm those setup questions do not repeat; project trust should still be asked for that project. In a newly opened PowerShell window, run `agy --version`. For an existing installation, confirm **開啟 AGY 登入與色彩設定** opens AGY.
 3. On a machine with `agy.exe` outside PATH, confirm `InstalledNotInPath`, select **修復 User PATH**, and require `InstalledWorking`. Run `agy --version` in a new PowerShell window.
 4. Before and after repair, capture `reg query HKCU\Environment /v Path`. Select **還原本次 PATH** and confirm the original User PATH value and registry type return. If another program changes PATH after repair, restore must refuse to overwrite it.
 5. With network access unavailable, confirm `NET-001` warns and installation does not report success.
@@ -17,8 +17,10 @@ During AGY installation, require the status bar to show the elapsed time and a r
 1. With Node.js missing or Node.js 18, confirm `DEV-002` fails, **下載／安裝 Node.js + npm** appears, and **安裝 clasp** is disabled. Approve the Node installation. If WinGet works, require `DEV-002` and `DEV-003` to pass after installation. If WinGet is unavailable, require the official Node.js download page to open and follow the LTS Windows installer instructions.
 2. With Node.js 20 or later but npm unavailable, confirm the Node/npm button appears and opens the official page with repair instructions. Repair or reinstall Node.js with npm and PATH selected, then press **重新檢查**; require `DEV-003` to pass.
 3. With Node.js 20 or later and npm working, but clasp absent, confirm the Node/npm button is hidden and **安裝 clasp** is enabled. Approve installation and require `DEV-004` to pass with a version.
-4. Open a new PowerShell window and run `node --version`, `npm --version`, and `clasp --version`. All must succeed.
-5. With clasp already working, confirm the install button is disabled. No Google login should start automatically.
+4. Open a new PowerShell window and run `node --version`, `npm.cmd --version`, and `clasp.cmd --version`. All must succeed. Confirm the app displays **開啟 clasp 登入視窗** after clasp passes. Click it and confirm a separate command window runs `clasp.cmd login` and lets the user finish authentication in the browser. Verify that it works even when the app itself was opened from a UNC path, and that a `clasp.cmd` in the user profile directory is not run instead of the PATH command.
+5. Run `clasp.cmd login` manually in PowerShell when needed; a bare `clasp` command may select `clasp.ps1` and be blocked by PowerShell's script execution policy. Confirm the app leaves that policy unchanged unless **修復 PowerShell clasp 指令** is explicitly approved. With clasp already working, the install button should be disabled and Google login should not start automatically.
+6. On a disposable Windows account where bare `clasp --version` is blocked by `Restricted`, click **修復 PowerShell clasp 指令**. Confirm the warning describes a current-user-wide change, then approve. Require a fresh Windows PowerShell `clasp --version` to pass. Record the previous CurrentUser policy and use the displayed restore command after the test.
+7. With a Group Policy or `AllSigned` policy in effect, confirm the repair refuses to change the setting. If a test shim still fails after changing to `RemoteSigned`, confirm the previous CurrentUser policy is restored. PowerShell 7 (`pwsh.exe`) is outside this repair's scope.
 
 ## Windows Terminal context menu
 

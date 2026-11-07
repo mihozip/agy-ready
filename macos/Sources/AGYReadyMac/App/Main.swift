@@ -26,10 +26,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let messageLabel = NSTextField(labelWithString: "")
     private let progress = NSProgressIndicator()
     private let agyButton = NSButton(title: "安裝 AGY CLI", target: nil, action: nil)
+    private let agySetupButton = NSButton(title: "開啟 AGY 登入與色彩設定", target: nil, action: nil)
     private let repairButton = NSButton(title: "修復 zsh PATH", target: nil, action: nil)
     private let restoreButton = NSButton(title: "還原本次 PATH", target: nil, action: nil)
     private let nodeButton = NSButton(title: "下載 Node.js + npm", target: nil, action: nil)
     private let claspButton = NSButton(title: "安裝 clasp", target: nil, action: nil)
+    private let copyReportButton = NSButton(title: "複製診斷報告", target: nil, action: nil)
+    private let saveReportButton = NSButton(title: "儲存報告", target: nil, action: nil)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let iconURL = Bundle.main.url(forResource: "AGYReadyMac", withExtension: "icns"),
@@ -106,12 +109,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overviewRows.orientation = .vertical
         overviewRows.alignment = .leading
         overviewRows.spacing = 7
-        return page([label("環境檢查", size: 18, bold: true), overviewRows])
+        configure(copyReportButton, action: #selector(copyReportClicked))
+        configure(saveReportButton, action: #selector(saveReportClicked))
+        return page([label("環境檢查", size: 18, bold: true),
+                     horizontal([copyReportButton, saveReportButton], spacing: 10), overviewRows])
     }
 
     private func makeAGYPage() -> NSView {
         agyStatus.font = .systemFont(ofSize: 14)
         configure(agyButton, action: #selector(installAGYClicked))
+        configure(agySetupButton, action: #selector(agySetupClicked))
         configure(repairButton, action: #selector(repairClicked))
         configure(restoreButton, action: #selector(restoreClicked))
         let actions = horizontal([agyButton, repairButton, restoreButton], spacing: 10)
@@ -119,7 +126,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             label("AGY CLI", size: 18, bold: true),
             agyStatus,
             actions,
-            label("安裝後會重新驗證版本。AGY 登入仍需在終端機自行完成。", size: 12, color: .secondaryLabelColor),
+            agySetupButton,
+            label("安裝成功後會開啟 AGY 首次設定，請在官方視窗完成登入、授權碼與色彩選擇。", size: 12, color: .secondaryLabelColor),
             label("PATH 修復只管理目前使用者的 ~/.zprofile，並保留可還原備份。", size: 12, color: .secondaryLabelColor)
         ])
     }
@@ -202,17 +210,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 snapshot.agyCandidate != nil ? "已找到 AGY，請檢查終端 PATH。" : "尚未安裝 AGY CLI。"
             toolsStatus.stringValue = "Node.js \(snapshot.nodeSupported ? "就緒" : "需安裝") · npm \(snapshot.npmAvailable ? "就緒" : "需修復") · clasp \(snapshot.claspWorking ? "就緒" : "未安裝")"
             agyButton.isEnabled = !model.isBusy && !snapshot.agyWorking
+            agySetupButton.isEnabled = !model.isBusy && snapshot.agyWorking
             repairButton.isEnabled = !model.isBusy && snapshot.agyNeedsPathRepair
             nodeButton.isEnabled = !model.isBusy && !(snapshot.nodeSupported && snapshot.npmAvailable)
             claspButton.isEnabled = !model.isBusy && snapshot.nodeSupported && snapshot.npmAvailable && !snapshot.claspWorking
         } else {
             overviewRows.addArrangedSubview(label("正在檢查…", size: 13))
             agyButton.isEnabled = false
+            agySetupButton.isEnabled = false
             repairButton.isEnabled = false
             nodeButton.isEnabled = false
             claspButton.isEnabled = false
         }
         restoreButton.isEnabled = !model.isBusy && model.canRestorePath
+        copyReportButton.isEnabled = !model.isBusy && model.snapshot != nil
+        saveReportButton.isEnabled = !model.isBusy && model.snapshot != nil
     }
 
     private func buildMenu() {
@@ -232,9 +244,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func refreshClicked() { Task { await model.refresh() } }
     @objc private func installAGYClicked() {
-        if confirm("安裝 AGY CLI", "將從 Google 官方網站下載並執行 macOS 安裝腳本，完成後重新驗證。") {
-            Task { await model.installAGY() }
+        if confirm("安裝 AGY CLI", "將從 Google 官方網站下載並執行 macOS 安裝腳本。驗證成功後會開啟 AGY 登入與色彩設定。") {
+            Task {
+                if await model.installAGY() { openAgySetup() }
+            }
         }
+    }
+    @objc private func agySetupClicked() { openAgySetup() }
+
+    private func openAgySetup() {
+        guard !model.isBusy, let snapshot = model.snapshot, snapshot.agyWorking,
+              let executable = DiagnosticService().resolve("agy", in: snapshot.shellPath) else { return }
+        do {
+            let workspace = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/AGYReadyMac/Onboarding")
+            try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+            let command = "cd \(shellQuote(workspace.path)) && \(shellQuote(executable))"
+            let script = "tell application \"Terminal\" to do script \"\(appleScriptEscape(command))\""
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", script]
+            process.terminationHandler = { [weak self] process in
+                guard process.terminationStatus != 0 else { return }
+                DispatchQueue.main.async {
+                    self?.model.setSetupMessage("無法開啟 AGY 設定視窗；請在終端機執行 agy 完成首次設定。")
+                }
+            }
+            try process.run()
+            model.setSetupMessage("已開啟 AGY 首次設定。請在 Terminal 完成登入、授權碼與色彩選擇；工作資料夾信任會依資料夾個別詢問。")
+        } catch {
+            model.setSetupMessage("無法開啟 AGY 設定視窗；請在終端機執行 agy 完成首次設定。")
+        }
+    }
+
+    private func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private func appleScriptEscape(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
     }
     @objc private func repairClicked() {
         if confirm("修復 zsh PATH", "將備份 ~/.zprofile，加入 ~/.local/bin，並在新的 zsh 程序驗證 AGY。") {
@@ -254,6 +303,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func facebookClicked() { open("https://www.facebook.com/albert.peng.56?locale=zh_TW") }
     @objc private func emailClicked() { open("mailto:mihozip@gmail.com") }
+
+    private func reportText() -> String? {
+        guard let snapshot = model.snapshot else { return nil }
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        return DiagnosticReport.render(snapshot, appVersion: version, lastError: model.lastError)
+    }
+
+    @objc private func copyReportClicked() {
+        guard let report = reportText() else { return }
+        NSPasteboard.general.clearContents()
+        let copied = NSPasteboard.general.setString(report, forType: .string)
+        showReportResult(copied ? "診斷報告已複製到剪貼簿。" : "無法複製診斷報告。")
+    }
+
+    @objc private func saveReportClicked() {
+        guard let report = reportText() else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "AGYReady-Diagnostic-Report.txt"
+        panel.allowedContentTypes = [.plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try report.write(to: url, atomically: true, encoding: .utf8)
+            showReportResult("診斷報告已儲存。")
+        } catch {
+            showReportResult("無法儲存報告：\(error.localizedDescription)")
+        }
+    }
+
+    private func showReportResult(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.runModal()
+    }
 
     private func confirm(_ title: String, _ detail: String) -> Bool {
         let alert = NSAlert()

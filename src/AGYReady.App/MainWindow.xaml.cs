@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private readonly DevelopmentDiagnosticService development;
     private readonly NodeInstaller nodeInstaller;
     private readonly ClaspInstaller claspInstaller;
+    private readonly PowerShellClaspRepairService powerShellClaspRepair;
     private readonly TerminalDiagnosticService terminalDiagnostics;
     private readonly TerminalInstaller terminalInstaller;
     private readonly TerminalContextMenuService terminalMenu;
@@ -47,6 +48,7 @@ public partial class MainWindow : Window
         development = new(runner, paths);
         nodeInstaller = new(runner, development);
         claspInstaller = new(runner, development);
+        powerShellClaspRepair = new(runner, development);
         terminalDiagnostics = new(runner, development);
         terminalInstaller = new(runner, terminalDiagnostics, development);
         terminalMenu = TerminalContextMenuService.CreateForCurrentUser();
@@ -72,11 +74,48 @@ public partial class MainWindow : Window
     {
         if (busy) return;
         var answer = MessageBox.Show(this,
-            "將從 https://antigravity.google/cli/ 下載並執行 Google 官方 AGY 安裝腳本。安裝後會重新檢查執行檔與版本。是否繼續？",
+            "將從 https://antigravity.google/cli/ 下載並執行 Google 官方 AGY 安裝腳本。驗證成功後會開啟 AGY 登入與色彩設定。是否繼續？",
             "確認安裝 AGY", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (answer != MessageBoxResult.Yes) return;
-        await RunActionAsync(progress => remediation.InstallAsync(lifetime.Token, progress),
+        var installed = await RunActionAsync(progress => remediation.InstallAsync(lifetime.Token, progress),
             "正在下載並安裝 AGY CLI", "官方安裝程序執行中，這可能需要幾分鐘。", "AGY 安裝中…");
+        if (installed && lastResult?.AgyState == AgyState.InstalledWorking)
+            OpenAgySetup();
+    }
+
+    private void AgySetup_Click(object sender, RoutedEventArgs e)
+    {
+        if (!busy) OpenAgySetup();
+    }
+
+    private void OpenAgySetup()
+    {
+        if (lastResult?.AgyState != AgyState.InstalledWorking ||
+            lastResult.ExecutablePath is not { } executable || !System.IO.File.Exists(executable)) return;
+
+        try
+        {
+            // Keep the first-run workspace in a dedicated application directory.
+            var workspace = System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+                "AGYReady", "Onboarding");
+            System.IO.Directory.CreateDirectory(workspace);
+            var start = new ProcessStartInfo(executable)
+            {
+                UseShellExecute = true,
+                WorkingDirectory = workspace
+            };
+            using var process = Process.Start(start)
+                ?? throw new InvalidOperationException("無法開啟 AGY 視窗。");
+            OverviewText.Text = "已開啟 AGY 首次設定";
+            Output.Text = "請在 AGY 視窗選擇登入方式，完成帳號登入、授權碼、色彩與顯示模式設定。工作資料夾的信任設定仍會依各資料夾個別詢問。";
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            MessageBox.Show(this, "無法開啟 AGY 設定視窗。請在終端機執行 agy 完成首次設定。",
+                "AGY 首次設定", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private async void RestorePath_Click(object sender, RoutedEventArgs e)
@@ -94,7 +133,7 @@ public partial class MainWindow : Window
     {
         if (busy || lastDevelopment?.CanInstallClasp != true) return;
         var answer = MessageBox.Show(this,
-            "將使用 npm 全域安裝 Google 的 @google/clasp，完成後執行 clasp --version 驗證。登入 Google 帳號需由你自行完成。是否繼續？",
+            "將使用 npm 全域安裝 Google 的 @google/clasp，完成後執行 clasp.cmd --version 驗證。驗證通過後可按「開啟 clasp 登入視窗」自行登入 Google 帳號。是否繼續？",
             "確認安裝 clasp", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (answer != MessageBoxResult.Yes) return;
 
@@ -113,6 +152,68 @@ public partial class MainWindow : Window
             Debug.WriteLine(ex);
             Output.Text = "clasp 安裝未完成，請重新檢查。";
             OverviewText.Text = "clasp 安裝未完成";
+        }
+        finally { SetBusy(false); }
+    }
+
+    private void LoginClasp_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy || lastDevelopment?.ClaspWorking != true) return;
+
+        var start = new ProcessStartInfo(DevelopmentDiagnosticService.CommandShell)
+        {
+            UseShellExecute = false,
+            CreateNoWindow = false,
+            WorkingDirectory = System.Environment.SystemDirectory
+        };
+        start.ArgumentList.Add("/d");
+        start.ArgumentList.Add("/k");
+        start.ArgumentList.Add("clasp.cmd");
+        start.ArgumentList.Add("login");
+        var freshEnvironment = development.CreateFreshEnvironment();
+        if (freshEnvironment is not null && freshEnvironment.TryGetValue("Path", out var freshPath))
+            start.Environment["Path"] = freshPath;
+
+        try
+        {
+            using var process = Process.Start(start)
+                ?? throw new InvalidOperationException("無法建立登入視窗。");
+            OverviewText.Text = "已開啟 clasp 登入視窗";
+            Output.Text = "請依新視窗與瀏覽器的提示完成 Google 登入。若要在 PowerShell 手動登入，請執行 clasp.cmd login。";
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            MessageBox.Show(this, "無法開啟登入視窗。請在 PowerShell 執行 clasp.cmd login。",
+                "clasp 登入", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void RepairPowerShellClasp_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy || lastDevelopment?.ClaspWorking != true) return;
+        var answer = MessageBox.Show(this,
+            "將檢查 Windows PowerShell 是否能直接執行 clasp。若目前使用者的執行原則為 Restricted，會將 CurrentUser 設為 RemoteSigned；這會允許此帳號執行其他符合該原則的 PowerShell 指令碼。若驗證失敗會嘗試還原。是否繼續？",
+            "確認修復 PowerShell clasp 指令", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (answer != MessageBoxResult.Yes) return;
+
+        BeginActivity("正在檢查 PowerShell clasp 指令", "讀取執行原則並以新程序驗證 clasp。");
+        try
+        {
+            var result = await powerShellClaspRepair.RepairAsync(lifetime.Token);
+            OverviewText.Text = result.Succeeded ? "PowerShell clasp 指令已可使用" : "PowerShell clasp 指令尚未可使用";
+            Output.Text = result.Message + (result.Changed && result.OriginalPolicy is not null
+                ? $"{System.Environment.NewLine}先前的 CurrentUser 設定：{result.OriginalPolicy}。若要手動還原，請執行 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy {result.OriginalPolicy}。"
+                : "");
+            MessageBox.Show(this, result.Message, "PowerShell clasp 指令",
+                MessageBoxButton.OK, result.Succeeded ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            Debug.WriteLine(ex);
+            OverviewText.Text = "PowerShell clasp 指令修復未完成";
+            Output.Text = "無法完成檢查或修復；請使用 clasp.cmd，並確認 PowerShell 執行原則。";
         }
         finally { SetBusy(false); }
     }
@@ -293,7 +394,7 @@ public partial class MainWindow : Window
         finally { SetBusy(false); }
     }
 
-    private async Task RunActionAsync(Func<IProgress<InstallerProgress>, Task<RemediationOutcome>> action,
+    private async Task<bool> RunActionAsync(Func<IProgress<InstallerProgress>, Task<RemediationOutcome>> action,
         string title, string detail, string output)
     {
         var id = BeginActivity(title, detail);
@@ -311,12 +412,14 @@ public partial class MainWindow : Window
             ActivityDetail.Text = "操作已結束，正在重新檢查環境。";
             var dev = await development.RunAsync(lifetime.Token);
             Render(outcome.Diagnostics, dev, outcome.Message, outcome.Installer);
+            return outcome.Succeeded;
         }
         catch (Exception ex)
         {
             Debug.WriteLine(ex);
             Output.Text = "操作未完成。系統設定可能已部分變更，請重新檢查。";
             OverviewText.Text = "操作未完成";
+            return false;
         }
         finally { SetBusy(false); }
     }
@@ -360,6 +463,9 @@ public partial class MainWindow : Window
         ToolStatusText.Text = dev.NeedsNodeRepair ? "Node.js 或 npm 需要安裝／修復"
             : dev.ClaspWorking ? $"clasp {dev.ClaspVersion} 已可使用"
             : "Node.js 與 npm 已就緒 · 可安裝 clasp";
+        ClaspLoginHint.Visibility = dev.ClaspWorking ? Visibility.Visible : Visibility.Collapsed;
+        ClaspLoginButton.Visibility = dev.ClaspWorking ? Visibility.Visible : Visibility.Collapsed;
+        PowerShellClaspButton.Visibility = dev.ClaspWorking ? Visibility.Visible : Visibility.Collapsed;
         TerminalStatusText.Text = lastTerminal is null ? "尚未檢查"
             : !lastTerminal.PackageQuerySucceeded ? "無法確認套件；可嘗試安裝或開啟修復設定"
             : lastTerminal.PackageRegistered ? "已安裝；右鍵選單需在檔案總管確認"
@@ -436,9 +542,12 @@ public partial class MainWindow : Window
             lastResult.AgyState is AgyState.InstalledNotInPath or
                 AgyState.InstalledInUserPathButCurrentProcessStale;
         InstallButton.IsEnabled = !value && lastResult?.AgyState == AgyState.NotInstalled;
+        AgySetupButton.IsEnabled = !value && lastResult?.AgyState == AgyState.InstalledWorking;
         RestoreButton.IsEnabled = !value && remediation.CanRestorePath;
         NodeButton.IsEnabled = !value && lastDevelopment?.NeedsNodeRepair == true;
         ClaspButton.IsEnabled = !value && lastDevelopment?.CanInstallClasp == true;
+        ClaspLoginButton.IsEnabled = !value && lastDevelopment?.ClaspWorking == true;
+        PowerShellClaspButton.IsEnabled = !value && lastDevelopment?.ClaspWorking == true;
         TerminalInstallButton.IsEnabled = !value && lastTerminal is { PackageRegistered: false };
         TerminalRepairButton.IsEnabled = !value && lastTerminal is { PackageRegistered: true } or
             { PackageQuerySucceeded: false };

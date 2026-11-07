@@ -56,6 +56,8 @@
                                     Margin="0,0,0,6" Click="RepairPath_Click" IsEnabled="False" />
                             <Button Name="RestoreButton" Content="還原本次 PATH" Height="30"
                                     Click="RestorePath_Click" IsEnabled="False" />
+                            <Button Name="AgySetupButton" Content="開啟 AGY 登入與色彩設定" Height="30"
+                                    Margin="0,6,0,0" Click="AgySetup_Click" IsEnabled="False" />
                         </StackPanel>
                     </GroupBox>
                     <GroupBox Header="Node.js / npm / clasp" Padding="10" Margin="0,0,0,10">
@@ -67,6 +69,15 @@
                                     IsEnabled="False" Visibility="Collapsed" />
                             <Button Name="ClaspButton" Content="安裝 clasp" Height="30"
                                     Click="InstallClasp_Click" IsEnabled="False" />
+                            <Button Name="ClaspLoginButton" Content="開啟 clasp 登入視窗" Height="30"
+                                    Margin="0,6,0,0" Click="LoginClasp_Click"
+                                    IsEnabled="False" Visibility="Collapsed" />
+                            <Button Name="PowerShellClaspButton" Content="修復 PowerShell clasp 指令" Height="30"
+                                    Margin="0,6,0,0" Click="RepairPowerShellClasp_Click"
+                                    IsEnabled="False" Visibility="Collapsed" />
+                            <TextBlock Name="ClaspLoginHint" Text="PowerShell 修復前用 clasp.cmd；修復後可直接用 clasp"
+                                       TextWrapping="Wrap" Margin="0,8,0,0"
+                                       Visibility="Collapsed" />
                         </StackPanel>
                     </GroupBox>
                     <GroupBox Header="Windows Terminal 右鍵選單" Padding="10" Margin="0,0,0,10">
